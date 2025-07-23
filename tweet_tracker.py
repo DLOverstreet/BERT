@@ -143,7 +143,12 @@ class TweetTracker:
             cutoff_date = datetime.now() - timedelta(days=retention_days)
             
             df = pd.read_csv(self.tweets_file)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
+            # Fix datetime parsing for ISO format
+            try:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+            except:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed')
             
             # Keep only recent data
             recent_df = df[df['timestamp'] >= cutoff_date]
@@ -168,7 +173,13 @@ class TweetTracker:
         try:
             if PANDAS_AVAILABLE:
                 df = pd.read_csv(self.tweets_file)
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                
+                # Fix datetime parsing for ISO format
+                try:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+                except:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed')
+                
                 df = df.sort_values('timestamp', ascending=False).head(limit)
                 
                 return [
@@ -191,7 +202,7 @@ class TweetTracker:
                     for row in reader:
                         try:
                             tweets.append({
-                                'timestamp': datetime.fromisoformat(row['timestamp']),
+                                'timestamp': datetime.fromisoformat(row['timestamp'].replace('Z', '+00:00')),
                                 'tweet_text': row['tweet_text'],
                                 'political_lean': row['political_lean'],
                                 'intensity_scale': float(row['intensity_scale']),
@@ -199,7 +210,8 @@ class TweetTracker:
                                 'vs_baseline': row['vs_baseline'],
                                 'extremism_score': float(row['extremism_score'])
                             })
-                        except:
+                        except Exception as e:
+                            print(f"Error parsing row: {e}")
                             continue
                 
                 # Sort and limit
@@ -264,13 +276,18 @@ class TweetTracker:
                 reader = csv.DictReader(f)
                 for row in reader:
                     try:
+                        # Handle ISO format timestamps
+                        timestamp_str = row['timestamp'].replace('Z', '+00:00')
+                        timestamp = datetime.fromisoformat(timestamp_str)
+                        
                         tweets.append({
-                            'timestamp': datetime.fromisoformat(row['timestamp']),
+                            'timestamp': timestamp,
                             'intensity_scale': float(row['intensity_scale']),
                             'confidence': float(row['confidence']),
                             'political_lean': row['political_lean']
                         })
-                    except:
+                    except Exception as e:
+                        print(f"Error parsing tweet row: {e}")
                         continue
             
             if not tweets:
@@ -328,7 +345,13 @@ class TweetTracker:
     def _get_pandas_analytics(self, days: int, cache_key: str) -> Dict[str, Any]:
         """Get analytics using pandas"""
         df = pd.read_csv(self.tweets_file)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        # Fix datetime parsing for ISO format
+        try:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+        except:
+            # Fallback to mixed format parsing
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed')
         
         # Filter to recent data
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -395,7 +418,10 @@ class TweetTracker:
                 reader = csv.DictReader(f)
                 for row in reader:
                     try:
-                        timestamp = datetime.fromisoformat(row['timestamp'])
+                        # Handle ISO format timestamps
+                        timestamp_str = row['timestamp'].replace('Z', '+00:00')
+                        timestamp = datetime.fromisoformat(timestamp_str)
+                        
                         if timestamp >= cutoff_date:
                             tweets.append({
                                 'timestamp': timestamp,
@@ -406,7 +432,8 @@ class TweetTracker:
                                 'vs_baseline': row['vs_baseline'],
                                 'word_count': int(row.get('word_count', 0))
                             })
-                    except:
+                    except Exception as e:
+                        print(f"Error parsing analytics row: {e}")
                         continue
             
             if not tweets:
@@ -464,7 +491,13 @@ class TweetTracker:
             
             if PANDAS_AVAILABLE:
                 df = pd.read_csv(self.tweets_file)
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                
+                # Fix datetime parsing for ISO format
+                try:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+                except:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed')
+                
                 df['date'] = df['timestamp'].dt.date
                 
                 # Group by date and calculate metrics
@@ -493,14 +526,17 @@ class TweetTracker:
                 reader = csv.DictReader(f)
                 for row in reader:
                     try:
-                        timestamp = datetime.fromisoformat(row['timestamp'])
+                        # Handle ISO format timestamps
+                        timestamp_str = row['timestamp'].replace('Z', '+00:00')
+                        timestamp = datetime.fromisoformat(timestamp_str)
                         date = timestamp.date()
                         
                         daily_data[date].append({
                             'intensity_scale': float(row['intensity_scale']),
                             'political_lean': row['political_lean']
                         })
-                    except:
+                    except Exception as e:
+                        print(f"Error parsing trend row: {e}")
                         continue
             
             trends = []
