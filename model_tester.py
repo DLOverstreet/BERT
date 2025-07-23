@@ -22,21 +22,45 @@ class ModelTester:
         self.classifier = None
         self.model_loaded = False
         
-        # Test cases with known expected results
+        # Test cases with known expected results - expanded with more examples
         self.test_cases = {
             "clearly_democratic": [
                 "Healthcare is a human right and we must ensure universal coverage for all Americans.",
                 "We need to expand social safety nets and support working families.",
                 "Climate change is real and we must take bold action to protect our planet.",
                 "Everyone deserves equal rights regardless of their background.",
-                "We should raise the minimum wage to help workers afford basic necessities."
+                "We should raise the minimum wage to help workers afford basic necessities.",
+                "Healthcare should be a right for everyone",
+                "We need universal healthcare coverage",
+                "Tax the wealthy to fund social programs",
+                "Expand Medicare for all Americans",
+                "Fight climate change with government action"
             ],
             "clearly_republican": [
                 "We need to cut taxes and reduce government spending to boost economic growth.",
                 "Strong border security is essential for national sovereignty.",
                 "We must protect the Second Amendment and gun rights.",
                 "Free market capitalism creates prosperity and opportunity.",
-                "We need to support law enforcement and maintain law and order."
+                "We need to support law enforcement and maintain law and order.",
+                "Cut taxes on businesses and families",
+                "Secure our borders and enforce immigration law",
+                "Protect our constitutional rights and freedoms",
+                "Reduce government regulation on businesses",
+                "Support our police and military"
+            ],
+            "senator_style_democratic": [
+                "I believe healthcare is a fundamental right that every American deserves.",
+                "We must invest in clean energy to combat climate change and create jobs.",
+                "Working families need our support through expanded childcare programs.",
+                "I will fight to raise the federal minimum wage to $15 per hour.",
+                "Access to quality education should not depend on zip code."
+            ],
+            "senator_style_republican": [
+                "I believe in limited government and fiscal responsibility.",
+                "We must secure our border and enforce our immigration laws.",
+                "I will always defend the Second Amendment and constitutional rights.",
+                "Free enterprise and lower taxes create jobs and opportunity.",
+                "I support our law enforcement officers and military heroes."
             ],
             "neutral": [
                 "Education is important for our children's future.",
@@ -46,6 +70,240 @@ class ModelTester:
                 "The weather has been nice this week."
             ]
         }
+    
+    def run_extreme_diagnostic(self):
+        """Run extreme diagnostic testing to understand model behavior"""
+        if not self.model_loaded:
+            st.error("Model not loaded. Please load model first.")
+            return
+        
+        st.write("## 🔬 Extreme Diagnostic Testing")
+        st.write("Testing with very obvious examples to understand model behavior...")
+        
+        # Test extremely obvious examples
+        extreme_tests = [
+            ("I am a proud socialist who wants to redistribute wealth", "Should be Democratic"),
+            ("I am a proud capitalist who wants to cut all taxes", "Should be Republican"),
+            ("Socialism is the best economic system", "Should be Democratic"),
+            ("Capitalism is the best economic system", "Should be Republican"),
+            ("I love big government and high taxes", "Should be Democratic"),
+            ("I love small government and low taxes", "Should be Republican"),
+            ("Democrats are always right about everything", "Should be Democratic"),
+            ("Republicans are always right about everything", "Should be Republican"),
+            ("I hate Republicans and love Democrats", "Should be Democratic"),
+            ("I hate Democrats and love Republicans", "Should be Republican")
+        ]
+        
+        results = []
+        
+        for text, expected in extreme_tests:
+            model_results = self.classifier(text)
+            if isinstance(model_results, list) and len(model_results) > 0:
+                if isinstance(model_results[0], list):
+                    result_list = model_results[0]
+                else:
+                    result_list = model_results
+                
+                winner = max(result_list, key=lambda x: x['score'])
+                predicted = winner['label']
+                confidence = winner['score'] * 100
+                
+                expected_label = "Democratic" if "Democratic" in expected else "Republican"
+                correct = expected_label.lower() in predicted.lower()
+                
+                results.append({
+                    'text': text,
+                    'expected': expected_label,
+                    'predicted': predicted,
+                    'confidence': f"{confidence:.1f}%",
+                    'correct': "✅" if correct else "❌"
+                })
+        
+        # Display results
+        df = pd.DataFrame(results)
+        st.dataframe(df, use_container_width=True)
+        
+        # Calculate accuracy
+        correct_count = sum(1 for r in results if r['correct'] == "✅")
+        total_count = len(results)
+        accuracy = (correct_count / total_count * 100) if total_count > 0 else 0
+        
+        st.metric("Extreme Example Accuracy", f"{accuracy:.1f}%")
+        
+        if accuracy < 50:
+            st.error("🚨 **MODEL IS FUNDAMENTALLY BROKEN** - Can't classify obvious examples")
+            st.write("**Possible causes:**")
+            st.write("- Training data was corrupted or mislabeled")
+            st.write("- Model was trained for a different task")
+            st.write("- Model has severe bias issues")
+            st.write("- Wrong model version or corrupted weights")
+            
+            if st.button("🔍 Try Different Model"):
+                st.code("# Try a different political classification model")
+                st.write("Consider using cardiffnlp/twitter-roberta-base-sentiment-latest instead")
+    
+    def analyze_training_bias(self):
+        """Analyze potential training bias patterns"""
+        st.write("## 🎯 Training Bias Analysis")
+        
+        # Test different phrasings of the same concept
+        concept_tests = {
+            "Healthcare as right": [
+                "Healthcare is a human right",
+                "Healthcare should be a right for everyone", 
+                "Access to healthcare is a fundamental right",
+                "Every person deserves healthcare",
+                "Healthcare access is a basic human right"
+            ],
+            "Tax reduction": [
+                "We should cut taxes",
+                "Reduce taxes on families",
+                "Lower tax rates for everyone",
+                "Tax cuts boost the economy",
+                "Decrease government taxation"
+            ],
+            "Climate action": [
+                "We must fight climate change",
+                "Climate action is urgent",
+                "Stop global warming now",
+                "Environmental protection is crucial",
+                "Green energy is the future"
+            ]
+        }
+        
+        for concept, phrases in concept_tests.items():
+            st.write(f"### {concept}")
+            
+            predictions = []
+            for phrase in phrases:
+                results = self.classifier(phrase)
+                if isinstance(results, list) and len(results) > 0:
+                    if isinstance(results[0], list):
+                        result_list = results[0]
+                    else:
+                        result_list = results
+                    
+                    winner = max(result_list, key=lambda x: x['score'])
+                    predictions.append({
+                        'phrase': phrase,
+                        'predicted': winner['label'],
+                        'confidence': winner['score'] * 100
+                    })
+            
+            # Show consistency
+            pred_labels = [p['predicted'] for p in predictions]
+            unique_labels = set(pred_labels)
+            
+            if len(unique_labels) == 1:
+                st.success(f"✅ Consistent: All phrases classified as {list(unique_labels)[0]}")
+            else:
+                st.warning(f"⚠️ Inconsistent: {len(unique_labels)} different classifications")
+            
+            # Show details
+            for pred in predictions:
+                color = "🔵" if "Democrat" in pred['predicted'] else "🔴"
+                st.write(f"{color} **{pred['phrase']}** → {pred['predicted']} ({pred['confidence']:.1f}%)")
+            
+            st.write("---")
+    
+    def test_senator_language(self):
+        """Test with actual senator-style language since that's what it was trained on"""
+        st.write("## 🏛️ Senator Language Testing")
+        st.write("Testing with formal political language similar to actual senator tweets...")
+        
+        senator_tests = {
+            "Democratic Senator Style": [
+                "Today I voted to expand healthcare access for working families across our great state.",
+                "We must invest in clean energy jobs and infrastructure for our future.",
+                "I'm proud to support legislation that raises the minimum wage for hardworking Americans.",
+                "Climate change is real and we need bold action to protect our planet.",
+                "Every child deserves access to quality, affordable education."
+            ],
+            "Republican Senator Style": [
+                "Today I voted to reduce the tax burden on hardworking families and small businesses.",
+                "We must secure our border and enforce our immigration laws to keep America safe.",
+                "I'm proud to defend our Second Amendment rights and constitutional freedoms.",
+                "Free market policies create jobs and opportunity for all Americans.",
+                "We need to support our law enforcement heroes and military veterans."
+            ]
+        }
+        
+        for style, texts in senator_tests.items():
+            st.write(f"### {style}")
+            
+            correct_predictions = 0
+            total_predictions = 0
+            
+            for text in texts:
+                results = self.classifier(text)
+                if isinstance(results, list) and len(results) > 0:
+                    if isinstance(results[0], list):
+                        result_list = results[0]
+                    else:
+                        result_list = results
+                    
+                    winner = max(result_list, key=lambda x: x['score'])
+                    predicted = winner['label']
+                    confidence = winner['score'] * 100
+                    
+                    expected = "Democratic" if "Democratic" in style else "Republican"
+                    correct = expected.lower() in predicted.lower()
+                    
+                    if correct:
+                        correct_predictions += 1
+                    total_predictions += 1
+                    
+                    status = "✅" if correct else "❌"
+                    color = "🔵" if "Democrat" in predicted else "🔴"
+                    
+                    st.write(f"{status} {color} **{predicted}** ({confidence:.1f}%) - {text[:60]}...")
+            
+            accuracy = (correct_predictions / total_predictions * 100) if total_predictions > 0 else 0
+            st.metric(f"{style} Accuracy", f"{accuracy:.1f}%")
+            st.write("---")
+    
+    def check_preprocessing_issues(self):
+        """Check if there are preprocessing or tokenization issues"""
+        st.write("## 🔧 Preprocessing Analysis")
+        
+        test_text = "Healthcare should be a right for everyone"
+        
+        # Show tokenization
+        if self.tokenizer:
+            tokens = self.tokenizer.tokenize(test_text)
+            token_ids = self.tokenizer.encode(test_text)
+            
+            st.write(f"**Original text:** {test_text}")
+            st.write(f"**Tokens:** {tokens}")
+            st.write(f"**Token IDs:** {token_ids}")
+            st.write(f"**Token count:** {len(tokens)}")
+            
+            # Check for special tokens
+            special_tokens = self.tokenizer.all_special_tokens
+            st.write(f"**Special tokens:** {special_tokens}")
+            
+            # Test different preprocessing
+            variations = [
+                test_text.lower(),
+                test_text.upper(), 
+                test_text.replace("should", "must"),
+                test_text.replace("everyone", "all Americans"),
+                f"[CLS] {test_text} [SEP]"
+            ]
+            
+            st.write("### Preprocessing Variations")
+            for i, variation in enumerate(variations):
+                results = self.classifier(variation)
+                if isinstance(results, list) and len(results) > 0:
+                    if isinstance(results[0], list):
+                        result_list = results[0]
+                    else:
+                        result_list = results
+                    
+                    winner = max(result_list, key=lambda x: x['score'])
+                    st.write(f"**Variation {i+1}:** {variation}")
+                    st.write(f"→ {winner['label']} ({winner['score']*100:.1f}%)")
+                    st.write("---")
     
     def load_model_detailed(self):
         """Load model with detailed debugging"""
