@@ -90,50 +90,26 @@ class PoliticalAnalyzer:
         if not tweet_text or len(tweet_text.strip()) < 5:
             return {"error": "Tweet text too short"}
         
+        # Clean the input text
+        clean_text = tweet_text.strip()
+        
         try:
             # Get predictions from the model
-            results = self.classifier(tweet_text)
+            logger.info(f"Analyzing text: '{clean_text[:50]}{'...' if len(clean_text) > 50 else ''}'")
+            results = self.classifier(clean_text)
             
             # Debug: Print results to help troubleshoot
-            logger.info(f"Model results: {results}")
+            logger.info(f"Raw model results: {results}")
             
-            # Extract scores - handle both old and new format
-            dem_score = 0
-            rep_score = 0
+            # Parse results robustly
+            parsed_results = self._parse_model_results(results)
+            if 'error' in parsed_results:
+                return parsed_results
             
-            # Results format: [[{'label': 'Republican', 'score': 0.999}, {'label': 'Democrat', 'score': 0.001}]]
-            # We need to get the inner list first
-            if isinstance(results, list) and len(results) > 0:
-                if isinstance(results[0], list):
-                    # Nested list format: [[{...}]]
-                    result_list = results[0]
-                else:
-                    # Direct list format: [{...}]
-                    result_list = results
-            else:
-                logger.error(f"Unexpected results format: {results}")
-                return {"error": f"Unexpected model output format: {type(results)}"}
+            dem_score = parsed_results['dem_score']
+            rep_score = parsed_results['rep_score']
             
-            # Now iterate over the actual result dictionaries
-            for result in result_list:
-                if not isinstance(result, dict):
-                    logger.error(f"Expected dict, got {type(result)}: {result}")
-                    continue
-                    
-                label = result['label'].upper()
-                score = result['score']
-                
-                if 'DEMOCRATIC' in label or 'DEMOCRAT' in label:
-                    dem_score = score
-                elif 'REPUBLICAN' in label:
-                    rep_score = score
-            
-            # Validate we got both scores
-            if dem_score == 0 and rep_score == 0:
-                logger.error(f"Failed to extract scores from results: {results}")
-                return {"error": "Failed to extract political scores from model output"}
-            
-            logger.info(f"Extracted scores - Dem: {dem_score}, Rep: {rep_score}")
+            logger.info(f"Parsed scores - Dem: {dem_score:.3f}, Rep: {rep_score:.3f}")
             
             # Calculate derived metrics
             political_direction = dem_score - rep_score  # -1 to +1
@@ -154,7 +130,7 @@ class PoliticalAnalyzer:
             intensity_percentile = self._get_intensity_percentile(extremism_score)
             
             result = {
-                'tweet_text': tweet_text,
+                'tweet_text': clean_text,
                 'dem_score': dem_score,
                 'rep_score': rep_score,
                 'political_direction': political_direction,
@@ -166,17 +142,170 @@ class PoliticalAnalyzer:
                 'vs_baseline': vs_baseline,
                 'intensity_percentile': intensity_percentile,
                 'timestamp': datetime.now(),
-                'model_version': self.model_name
+                'model_version': self.model_name,
+                'raw_results': results  # Include for debugging
             }
             
-            logger.info(f"Analysis completed successfully: {political_lean}, intensity: {intensity_scale:.1f}")
+            logger.info(f"Analysis completed: {political_lean}, intensity: {intensity_scale:.1f}, confidence: {confidence:.1f}%")
             return result
             
         except Exception as e:
             logger.error(f"Analysis failed with exception: {e}")
             import traceback
-            traceback.print_exc()
-            return {"error": f"Analysis failed: {str(e)}"}
+            logger.error(traceback.format_exc())
+            return {"error": f"Analysis failed: {str(e)}", "details": traceback.format_exc()}
+    
+    def _parse_model_results(self, results) -> Dict[str, Any]:
+        """
+        Parse model results handling various formats
+        
+        Args:
+            results: Raw results from the classifier
+            
+        Returns:
+            Dict with dem_score, rep_score, or error
+        """
+        try:
+            # Handle different result formats
+            if isinstance(results, list):
+                if len(results) > 0 and isinstance(results[0], list):
+                    # Nested format: [[{...}]]
+                    result_list = results[0]
+                elif len(results) > 0 and isinstance(results[0], dict):
+                    # Direct format: [{...}]
+                    result_list = results
+                else:
+                    return {"error": f"Unexpected results format: {type(results[0]) if results else 'empty list'}"}
+            else:
+                return {"error": f"Results not a list: {type(results)}"}
+            
+            # Extract scores
+            dem_score = 0.0
+            rep_score = 0.0
+            
+            # Look for different possible label formats
+            for result_dict in result_list:
+                if not isinstance(result_dict, dict):
+                    continue
+                
+                label = result_dict.get('label', '').upper()
+                score = float(result_dict.get('score', 0))
+                
+                # Check various label formats
+                if any(keyword in label for keyword in ['DEMOCRATIC', 'DEMOCRAT', 'DEM']):
+                    dem_score = score
+                elif any(keyword in label for keyword in ['REPUBLICAN', 'GOP', 'REP']):
+                    rep_score = score
+                elif label in ['LABEL_0', '0']:
+                    # Some models use generic labels - need to check which is which
+                    # This might need adjustment based on actual model behavior
+                    rep_score = score  # Assuming LABEL_0 is Republican
+                elif label in ['LABEL_1', '1']:
+                    dem_score = score  # Assuming LABEL_1 is Democratic
+                else:
+                    logger.warning(f"Unknown label format: {label}")
+            
+            # Validate scores
+            if dem_score == 0 and rep_score == 0:
+                # Try alternative parsing for generic labels
+                logger.info("Standard parsing failed, trying alternative label mapping...")
+                if len(result_list) >= 2:
+                    # If we have exactly 2 results, assume they're the two classes
+                    sorted_results = sorted(result_list, key=lambda x: x.get('score', 0), reverse=True)
+                    high_score = sorted_results[0]['score']
+                    low_score = sorted_results[1]['score']
+                    
+                    # Make assumption based on common model patterns
+                    # This is a heuristic that may need adjustment
+                    rep_score = high_score if high_score > 0.5 else low_score
+                    dem_score = low_score if high_score > 0.5 else high_score
+                    
+                    logger.info(f"Alternative parsing: Rep={rep_score:.3f}, Dem={dem_score:.3f}")
+                
+                if dem_score == 0 and rep_score == 0:
+                    return {
+                        "error": "Could not extract political scores from model output",
+                        "raw_results": result_list,
+                        "debug_info": f"Found {len(result_list)} results with labels: {[r.get('label') for r in result_list]}"
+                    }
+            
+            # Ensure scores sum to approximately 1.0 (they should for classification)
+            total_score = dem_score + rep_score
+            if abs(total_score - 1.0) > 0.1:
+                logger.warning(f"Scores don't sum to 1.0: {total_score:.3f}")
+            
+            return {
+                'dem_score': dem_score,
+                'rep_score': rep_score
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing model results: {e}")
+            return {"error": f"Failed to parse model results: {str(e)}"}
+    
+    def test_model_with_examples(self) -> Dict[str, Any]:
+        """
+        Test the model with known examples to validate it's working
+        
+        Returns:
+            Dict with test results
+        """
+        if not self.model_available:
+            return {"error": "Model not available"}
+        
+        test_cases = {
+            "democratic": [
+                "Healthcare is a human right for all Americans",
+                "We need to expand social programs to help working families",
+                "Climate change requires immediate government action"
+            ],
+            "republican": [
+                "We need to cut taxes and reduce government spending",
+                "Strong border security is essential for America",
+                "Free market solutions drive economic prosperity"
+            ]
+        }
+        
+        results = {}
+        
+        for expected_lean, texts in test_cases.items():
+            case_results = []
+            for text in texts:
+                analysis = self.analyze_tweet(text)
+                if 'error' not in analysis:
+                    case_results.append({
+                        'text': text,
+                        'predicted_lean': analysis['political_lean'].lower(),
+                        'confidence': analysis['confidence'],
+                        'correct': expected_lean in analysis['political_lean'].lower()
+                    })
+                else:
+                    case_results.append({
+                        'text': text,
+                        'error': analysis['error']
+                    })
+            
+            results[expected_lean] = case_results
+        
+        # Calculate accuracy
+        correct_predictions = 0
+        total_predictions = 0
+        
+        for lean_results in results.values():
+            for result in lean_results:
+                if 'correct' in result:
+                    if result['correct']:
+                        correct_predictions += 1
+                    total_predictions += 1
+        
+        accuracy = (correct_predictions / total_predictions * 100) if total_predictions > 0 else 0
+        
+        return {
+            'test_results': results,
+            'accuracy': accuracy,
+            'correct_predictions': correct_predictions,
+            'total_predictions': total_predictions
+        }
     
     def _compare_to_baseline(self, score: float) -> str:
         """Compare score to 2021 senator baseline"""

@@ -203,7 +203,7 @@ def main():
         
         page = st.radio(
             "Choose a section:",
-            ["🔍 Analyze Tweets", "📊 Analytics Dashboard", "📈 Historical Trends", "ℹ️ About"],
+            ["🔍 Analyze Tweets", "📊 Analytics Dashboard", "📈 Historical Trends", "🔬 Model Testing", "ℹ️ About"],
             index=0
         )
         
@@ -239,6 +239,8 @@ def main():
         show_analytics_page()
     elif page == "📈 Historical Trends":
         show_trends_page()
+    elif page == "🔬 Model Testing":
+        show_model_testing_page()
     elif page == "ℹ️ About":
         show_about_page()
 
@@ -251,41 +253,54 @@ def show_analyze_page():
     with col1:
         st.markdown("### Enter Tweet Text")
         
-        # Text input
+        # Text input with better handling
         tweet_text = st.text_area(
             "Paste a tweet or political statement:",
-            height=100,
-            placeholder="e.g., 'Healthcare should be a human right for all Americans'"
+            height=120,
+            placeholder="e.g., 'Healthcare should be a human right for all Americans'",
+            key="tweet_input",
+            help="Enter any political text to analyze. Minimum 10 characters."
         )
         
+        # Character count and validation
+        char_count = len(tweet_text) if tweet_text else 0
+        if char_count > 0:
+            if char_count < 10:
+                st.warning(f"⚠️ Text too short ({char_count} chars). Need at least 10 characters.")
+            elif char_count > 500:
+                st.warning(f"⚠️ Text is long ({char_count} chars). Model works best with shorter text.")
+            else:
+                st.success(f"✅ Ready to analyze ({char_count} characters)")
+        
+        # Analysis button - always visible when text is valid
+        analysis_ready = tweet_text and len(tweet_text.strip()) >= 10
+        
         # Quick examples
-        st.markdown("**Quick Examples:**")
+        st.markdown("**📝 Quick Examples:**")
         example_col1, example_col2 = st.columns(2)
         
         with example_col1:
-            if st.button("🔵 Democratic Example", help="Click to use a Democratic-leaning example"):
-                st.session_state.example_tweet = "Healthcare is a human right and we must ensure universal coverage for all Americans."
+            if st.button("🔵 Democratic Example", key="dem_ex"):
+                st.session_state.tweet_input = "Healthcare is a human right and we must ensure universal coverage for all Americans."
+                st.rerun()
                 
-            if st.button("🔴 Republican Example", help="Click to use a Republican-leaning example"):
-                st.session_state.example_tweet = "We need to cut taxes and reduce government spending to unleash economic growth."
+            if st.button("🔴 Republican Example", key="rep_ex"):
+                st.session_state.tweet_input = "We need to cut taxes and reduce government spending to unleash economic growth."
+                st.rerun()
         
         with example_col2:
-            if st.button("⚖️ Neutral Example", help="Click to use a neutral example"):
-                st.session_state.example_tweet = "Education is important for preparing our children for the future."
+            if st.button("⚖️ Neutral Example", key="neutral_ex"):
+                st.session_state.tweet_input = "Education is important for preparing our children for the future."
+                st.rerun()
                 
-            if st.button("🔥 Extreme Example", help="Click to use a high-intensity example"):
-                st.session_state.example_tweet = "The radical left wants to destroy America with their socialist agenda!"
-        
-        # Use example if selected
-        if 'example_tweet' in st.session_state:
-            tweet_text = st.session_state.example_tweet
-            del st.session_state.example_tweet
-            st.rerun()
+            if st.button("🔥 Extreme Example", key="extreme_ex"):
+                st.session_state.tweet_input = "The radical left wants to destroy America with their socialist agenda!"
+                st.rerun()
     
     with col2:
         st.markdown("### 📊 Model Info")
         st.markdown("""
-        <div class="baseline-info">
+        <div style="background: rgba(31, 71, 136, 0.1); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
             <strong>🎯 Model Details:</strong><br>
             • Trained on 2021 senator tweets<br>
             • 90.76% accuracy<br>
@@ -295,44 +310,87 @@ def show_analyze_page():
         """, unsafe_allow_html=True)
         
         st.markdown("""
-        <div class="comparison-warning">
+        <div style="background: rgba(196, 30, 58, 0.1); padding: 1rem; border-radius: 8px;">
             <strong>⚠️ Baseline Context:</strong><br>
             Results compare to 2021 senator discourse. 
             Higher intensity may indicate more extreme 
             language than typical political speech.
         </div>
         """, unsafe_allow_html=True)
+        
+        # Debug info
+        if st.button("🔍 Open Model Tester"):
+            st.info("💡 Go to the '🔬 Model Testing' page in the sidebar for comprehensive debugging tools.")
 
-    # Analysis section
-    if tweet_text and len(tweet_text.strip()) > 10:
-        if st.button("🔍 Analyze Tweet", type="primary"):
+    # Analysis section - improved logic
+    if analysis_ready:
+        # Big analyze button
+        analyze_button = st.button(
+            "🔍 Analyze Political Content", 
+            type="primary",
+            use_container_width=True,
+            help="Click to analyze the political sentiment and intensity"
+        )
+        
+        if analyze_button:
             # Check if model is available
             if not st.session_state.political_analyzer or not st.session_state.political_analyzer.model_available:
                 st.error("❌ Model not available. Please refresh the page to retry model loading.")
+                if st.button("🔄 Retry Model Loading"):
+                    st.session_state.political_analyzer = None
+                    st.rerun()
                 return
                 
             with st.spinner("🤖 Analyzing political intensity..."):
-                # Analyze the tweet
-                analysis_result = st.session_state.political_analyzer.analyze_tweet(tweet_text.strip())
-                
-                if analysis_result and 'error' not in analysis_result:
-                    # Log the analysis
-                    st.session_state.tweet_tracker.log_tweet(
-                        tweet_text=tweet_text.strip(),
-                        analysis_result=analysis_result,
-                        session_id=st.session_state.session_id
-                    )
+                try:
+                    # Clean the input text
+                    clean_text = tweet_text.strip()
                     
-                    # Display results
-                    show_analysis_results(analysis_result, tweet_text.strip())
-                else:
-                    # Show the actual error message if available
-                    error_msg = analysis_result.get('error', 'Unknown error occurred') if analysis_result else 'No result returned'
-                    st.error(f"❌ Analysis failed: {error_msg}")
-                    st.info("💡 Try a different tweet or check the console for more details.")
+                    # Analyze the tweet
+                    analysis_result = st.session_state.political_analyzer.analyze_tweet(clean_text)
+                    
+                    if analysis_result and 'error' not in analysis_result:
+                        # Log the analysis
+                        st.session_state.tweet_tracker.log_tweet(
+                            tweet_text=clean_text,
+                            analysis_result=analysis_result,
+                            session_id=st.session_state.session_id
+                        )
+                        
+                        # Display results
+                        show_analysis_results(analysis_result, clean_text)
+                        
+                    else:
+                        # Show the actual error message
+                        error_msg = analysis_result.get('error', 'Unknown error occurred') if analysis_result else 'No result returned'
+                        st.error(f"❌ Analysis failed: {error_msg}")
+                        
+                        # Show debug info
+                        with st.expander("🔍 Debug Information"):
+                            st.write("**Input text:**", repr(clean_text))
+                            st.write("**Text length:**", len(clean_text))
+                            st.write("**Model available:**", st.session_state.political_analyzer.model_available if st.session_state.political_analyzer else "No analyzer")
+                            if analysis_result:
+                                st.write("**Raw result:**", analysis_result)
+                        
+                        st.info("💡 Try a different text or use the model tester below for debugging.")
+                
+                except Exception as e:
+                    st.error(f"❌ Unexpected error during analysis: {e}")
+                    with st.expander("🔍 Error Details"):
+                        import traceback
+                        st.code(traceback.format_exc())
     
-    elif tweet_text and len(tweet_text.strip()) <= 10:
-        st.warning("⚠️ Please enter a longer tweet (at least 10 characters) for accurate analysis.")
+    else:
+        # Show disabled button when not ready
+        st.button(
+            "🔍 Enter text above to analyze", 
+            disabled=True,
+            use_container_width=True,
+            help="Enter at least 10 characters of political text to enable analysis"
+        )
+    
+    # Model debugging section removed - now available on dedicated testing page
     
     # Recent analyses
     show_recent_analyses()
@@ -460,6 +518,44 @@ def show_analysis_results(analysis: Dict[str, Any], tweet_text: str):
     )
     
     st.plotly_chart(scores_fig, use_container_width=True)
+
+def show_model_testing_page():
+    """Show model testing and debugging page"""
+    try:
+        from model_tester import show_model_tester
+        show_model_tester()
+    except ImportError:
+        st.error("❌ Model tester not available")
+        st.info("Make sure `model_tester.py` is in your project directory")
+        
+        # Basic testing functionality
+        st.title("🔬 Basic Model Testing")
+        
+        if st.session_state.political_analyzer and st.session_state.political_analyzer.model_available:
+            st.success("✅ Model is loaded and available")
+            
+            # Quick test
+            test_text = st.text_input("Enter text to test:", "Healthcare is a human right")
+            if st.button("🧪 Quick Test") and test_text:
+                with st.spinner("Testing..."):
+                    result = st.session_state.political_analyzer.analyze_tweet(test_text)
+                    if 'error' not in result:
+                        st.success(f"✅ Classification: {result['political_lean']} ({result['confidence']:.1f}% confidence)")
+                        st.json(result)
+                    else:
+                        st.error(f"❌ Test failed: {result['error']}")
+            
+            # Model info
+            if st.button("ℹ️ Show Raw Model Info"):
+                if hasattr(st.session_state.political_analyzer, 'model'):
+                    st.write("**Model Config:**")
+                    config = st.session_state.political_analyzer.model.config
+                    st.json(config.to_dict())
+        else:
+            st.error("❌ Model not available")
+            if st.button("🔄 Retry Model Loading"):
+                st.session_state.political_analyzer = None
+                st.rerun()
 
 def show_recent_analyses():
     """Show recent tweet analyses"""
