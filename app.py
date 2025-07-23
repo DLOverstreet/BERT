@@ -18,6 +18,7 @@ try:
     from political_analyzer import PoliticalAnalyzer
     from tweet_tracker import TweetTracker
     from analytics_dashboard import AnalyticsDashboard
+    import pandas as pd
 except ImportError as e:
     st.error(f"Failed to import modules: {e}")
     st.stop()
@@ -303,6 +304,14 @@ def show_analyze_page():
     
     with col2:
         st.markdown("### 📊 Model Info")
+        
+        # Show label swap status
+        if st.session_state.political_analyzer and hasattr(st.session_state.political_analyzer, 'swap_labels'):
+            if st.session_state.political_analyzer.swap_labels:
+                st.warning("🔄 **Label Swapping ACTIVE** - Model labels are reversed")
+            else:
+                st.info("📋 **Normal Labels** - Using standard interpretation")
+        
         st.markdown("""
         <div style="background: rgba(31, 71, 136, 0.1); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
             <strong>🎯 Model Details:</strong><br>
@@ -366,6 +375,40 @@ def show_analyze_page():
                         # Display results
                         show_analysis_results(analysis_result, clean_text)
                         
+                        # Check for potential misclassification and suggest label swapping
+                        predicted_lean = analysis_result['political_lean']
+                        confidence = analysis_result.get('confidence', 0)
+                        
+                        # Check for obvious keyword mismatches
+                        democratic_keywords = ['healthcare', 'human right', 'universal', 'social safety', 'climate action', 'expand', 'public option', 'minimum wage']
+                        republican_keywords = ['cut taxes', 'reduce spending', 'border security', 'second amendment', 'free market', 'law and order']
+                        
+                        has_dem_keywords = any(keyword in clean_text.lower() for keyword in democratic_keywords)
+                        has_rep_keywords = any(keyword in clean_text.lower() for keyword in republican_keywords)
+                        
+                        # Show label swap suggestion for obvious misclassifications
+                        swap_enabled = getattr(st.session_state.political_analyzer, 'swap_labels', False)
+                        
+                        if not swap_enabled and ((has_dem_keywords and predicted_lean == 'Republican' and confidence > 80) or \
+                           (has_rep_keywords and predicted_lean == 'Democratic' and confidence > 80)):
+                            
+                            st.warning("🤔 **Does this classification look wrong?**")
+                            expected = 'Democratic' if has_dem_keywords else 'Republican'
+                            st.write(f"This appears to contain {expected.lower()} keywords but was classified as {predicted_lean}.")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("🔧 Try Label Swapping"):
+                                    st.session_state.political_analyzer.set_label_swap(True)
+                                    st.info("✅ Label swapping enabled for future analyses.")
+                                    st.rerun()
+                            with col2:
+                                if st.button("📊 Test All Examples"):
+                                    st.info("💡 Go to '🔬 Model Testing' to run comprehensive accuracy tests.")
+                        
+                        elif swap_enabled:
+                            st.info("🔄 **Label swapping is active** - Model labels are being reversed.")
+                        
                     else:
                         # Show the actual error message
                         error_msg = analysis_result.get('error', 'Unknown error occurred') if analysis_result else 'No result returned'
@@ -379,7 +422,7 @@ def show_analyze_page():
                             if analysis_result:
                                 st.write("**Raw result:**", analysis_result)
                         
-                        st.info("💡 Try a different text or use the model tester below for debugging.")
+                        st.info("💡 Try a different text or use the model tester for debugging.")
                 
                 except Exception as e:
                     st.error(f"❌ Unexpected error during analysis: {e}")
@@ -525,6 +568,84 @@ def show_analysis_results(analysis: Dict[str, Any], tweet_text: str):
 
 def show_model_testing_page():
     """Show model testing and debugging page"""
+    st.title("🔬 Model Testing & Debugging")
+    st.markdown("*Comprehensive testing of the DistilBERT political classification model*")
+    
+    # Quick label accuracy test
+    st.write("## 🚨 Quick Label Accuracy Test")
+    st.markdown("""
+    **Issue detected**: The model may have reversed labels where "Republican" actually means Democratic and vice versa.
+    Let's test both interpretations:
+    """)
+    
+    if st.button("🧪 Test Label Accuracy", type="primary"):
+        if st.session_state.political_analyzer and st.session_state.political_analyzer.model_available:
+            with st.spinner("Testing both normal and swapped label interpretations..."):
+                try:
+                    test_results = st.session_state.political_analyzer.test_label_accuracy()
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Normal Labels Accuracy", f"{test_results['normal_accuracy']:.1f}%")
+                    with col2:
+                        st.metric("Swapped Labels Accuracy", f"{test_results['swapped_accuracy']:.1f}%")
+                    
+                    if test_results['recommendation'] == 'swap_labels':
+                        st.error("🚨 **LABELS ARE REVERSED!** The model performs much better with swapped labels.")
+                        
+                        if st.button("🔧 Enable Label Swapping"):
+                            st.session_state.political_analyzer.set_label_swap(True)
+                            st.success("✅ Label swapping enabled! Try analyzing tweets again.")
+                            st.info("💡 Go back to 'Analyze Tweets' and test with the examples.")
+                    
+                    elif test_results['normal_accuracy'] < 30:
+                        st.error("🚨 **MODEL IS PERFORMING VERY POORLY** - Both interpretations have low accuracy.")
+                    
+                    else:
+                        st.success("✅ **MODEL LABELS ARE CORRECT** - Normal interpretation works best.")
+                    
+                    # Show detailed results
+                    with st.expander("📊 Detailed Test Results"):
+                        st.write("### Normal Interpretation Results")
+                        normal_df = pd.DataFrame(test_results['results']['normal']['details'])
+                        if not normal_df.empty:
+                            st.dataframe(normal_df)
+                        
+                        st.write("### Swapped Interpretation Results") 
+                        swapped_df = pd.DataFrame(test_results['results']['swapped']['details'])
+                        if not swapped_df.empty:
+                            st.dataframe(swapped_df)
+                            
+                except Exception as e:
+                    st.error(f"❌ Test failed: {e}")
+        else:
+            st.error("❌ Model not available")
+    
+    # Current label mode indicator
+    if st.session_state.political_analyzer and st.session_state.political_analyzer.model_available:
+        swap_status = getattr(st.session_state.political_analyzer, 'swap_labels', False)
+        if swap_status:
+            st.success("🔄 **Label Swapping ENABLED** - 'Republican' labels interpreted as Democratic")
+        else:
+            st.info("📋 **Normal Labels** - 'Republican' interpreted as Republican")
+        
+        # Manual toggle
+        st.write("### Manual Label Control")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Enable Label Swapping"):
+                st.session_state.political_analyzer.set_label_swap(True)
+                st.success("Label swapping enabled")
+                st.rerun()
+        with col2:
+            if st.button("📋 Use Normal Labels"):
+                st.session_state.political_analyzer.set_label_swap(False)
+                st.success("Normal labels enabled")
+                st.rerun()
+    
+    st.markdown("---")
+    
+    # Full model tester
     try:
         from model_tester import show_model_tester
         show_model_tester()

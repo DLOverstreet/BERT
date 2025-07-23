@@ -163,6 +163,170 @@ class ModelTester:
         
         # Summary analysis
         self._analyze_test_results(all_results)
+        
+        # Check for label reversal
+        self._check_label_reversal(all_results)
+    
+    def _check_label_reversal(self, all_results):
+        """Check if the model labels are reversed"""
+        st.write("## 🔄 Label Reversal Analysis")
+        
+        st.write("""
+        **Hypothesis**: The model's labels might be reversed. Let's check if swapping 
+        "Republican" ↔ "Democratic" gives better results.
+        """)
+        
+        # Test with obvious examples
+        obvious_tests = {
+            "Should be Democratic": [
+                "Healthcare is a human right for everyone",
+                "We need universal healthcare coverage", 
+                "Climate change requires government action",
+                "Expand social safety nets for working families"
+            ],
+            "Should be Republican": [
+                "Cut taxes and reduce government spending",
+                "Strong border security is essential",
+                "Protect Second Amendment rights",
+                "Free market capitalism creates prosperity"
+            ]
+        }
+        
+        total_correct_normal = 0
+        total_correct_swapped = 0
+        total_tests = 0
+        
+        results_table = []
+        
+        for expected_category, texts in obvious_tests.items():
+            expected_label = "democrat" if "democratic" in expected_category.lower() else "republican"
+            
+            for text in texts:
+                # Get model prediction
+                model_results = self.classifier(text)
+                if isinstance(model_results, list) and len(model_results) > 0:
+                    if isinstance(model_results[0], list):
+                        result_list = model_results[0]
+                    else:
+                        result_list = model_results
+                    
+                    winner = max(result_list, key=lambda x: x['score'])
+                    predicted_label = winner['label'].lower()
+                    confidence = winner['score'] * 100
+                    
+                    # Check normal interpretation
+                    normal_correct = expected_label in predicted_label
+                    
+                    # Check swapped interpretation  
+                    swapped_prediction = "democrat" if "republican" in predicted_label else "republican"
+                    swapped_correct = expected_label in swapped_prediction
+                    
+                    results_table.append({
+                        'text': text[:50] + "..." if len(text) > 50 else text,
+                        'expected': expected_label.title(),
+                        'model_says': winner['label'],
+                        'confidence': f"{confidence:.1f}%",
+                        'normal_correct': "✅" if normal_correct else "❌",
+                        'swapped_correct': "✅" if swapped_correct else "❌"
+                    })
+                    
+                    if normal_correct:
+                        total_correct_normal += 1
+                    if swapped_correct:
+                        total_correct_swapped += 1
+                    total_tests += 1
+        
+        # Display results table
+        if results_table:
+            st.write("### Test Results")
+            
+            import pandas as pd
+            df = pd.DataFrame(results_table)
+            st.dataframe(df, use_container_width=True)
+            
+            # Summary
+            normal_accuracy = (total_correct_normal / total_tests * 100) if total_tests > 0 else 0
+            swapped_accuracy = (total_correct_swapped / total_tests * 100) if total_tests > 0 else 0
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Normal Interpretation Accuracy", f"{normal_accuracy:.1f}%")
+            with col2:
+                st.metric("Swapped Labels Accuracy", f"{swapped_accuracy:.1f}%")
+            
+            st.write("### 🔍 Diagnosis")
+            
+            if swapped_accuracy > normal_accuracy + 20:
+                st.error("🚨 **LABELS ARE LIKELY REVERSED!**")
+                st.write("The model performs much better when we swap Republican ↔ Democratic labels.")
+                st.write("**Recommendation**: Implement label swapping in the analyzer.")
+                
+                # Show fix button
+                if st.button("🔧 Apply Label Swap Fix"):
+                    st.code("""
+# Add this to political_analyzer.py in the _parse_model_results method:
+
+# LABEL SWAP FIX - Model labels appear to be reversed
+if any(keyword in label for keyword in ['DEMOCRATIC', 'DEMOCRAT', 'DEM']):
+    rep_score = score  # Swap: Democratic label actually means Republican
+elif any(keyword in label for keyword in ['REPUBLICAN', 'GOP', 'REP']):
+    dem_score = score  # Swap: Republican label actually means Democratic
+                    """)
+                    st.info("Copy this code fix and apply it to your political_analyzer.py file")
+            
+            elif normal_accuracy < 30:
+                st.error("🚨 **MODEL IS PERFORMING VERY POORLY**")
+                st.write("Both normal and swapped interpretations have low accuracy.")
+                st.write("**Possible issues**:")
+                st.write("- Model was trained incorrectly")
+                st.write("- Wrong model version")
+                st.write("- Model has systematic bias")
+                st.write("- Training data was mislabeled")
+            
+            elif normal_accuracy > 70:
+                st.success("✅ **MODEL IS WORKING CORRECTLY**")
+                st.write("Normal label interpretation shows good accuracy.")
+            
+            else:
+                st.warning("⚠️ **MODEL HAS MODERATE ACCURACY**")
+                st.write("Results are mixed. The model may have some bias or training issues.")
+        
+        # Additional debugging info
+        st.write("### 🔬 Additional Debugging")
+        
+        if st.button("🔍 Test Label Mapping"):
+            self._test_label_mapping()
+    
+    def _test_label_mapping(self):
+        """Test the model's label mapping with extreme examples"""
+        st.write("#### Extreme Example Testing")
+        
+        extreme_tests = [
+            ("I love socialism and hate capitalism", "Should be Democratic"),
+            ("I love capitalism and hate socialism", "Should be Republican"),
+            ("Defund the police completely", "Should be Democratic"),
+            ("Blue lives matter - support police", "Should be Republican"),
+            ("Tax the rich at 90% rates", "Should be Democratic"), 
+            ("Eliminate all taxes on businesses", "Should be Republican")
+        ]
+        
+        for text, expected in extreme_tests:
+            st.write(f"**Test**: {text}")
+            st.write(f"**Expected**: {expected}")
+            
+            results = self.classifier(text)
+            if isinstance(results, list) and len(results) > 0:
+                if isinstance(results[0], list):
+                    result_list = results[0]
+                else:
+                    result_list = results
+                
+                for result in result_list:
+                    label = result['label']
+                    score = result['score'] * 100
+                    st.write(f"- **{label}**: {score:.1f}%")
+            
+            st.write("---")
     
     def _analyze_test_results(self, all_results):
         """Analyze test results for patterns"""
