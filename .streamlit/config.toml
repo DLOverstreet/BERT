@@ -1,0 +1,35 @@
+[theme]
+primaryColor = "#1f4788"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+[server]
+headless = false
+enableCORS = false
+enableXsrfProtection = true
+maxUploadSize = 200
+port = 8501
+
+[browser]
+gatherUsageStats = false
+showErrorDetails = true
+
+[client]
+caching = true
+displayEnabled = true
+showErrorDetails = true
+
+[runner]
+magicEnabled = true
+installTracer = false
+fixMatplotlib = true
+
+[logger]
+level = "info"
+messageFormat = "%(asctime)s %(message)s"
+
+[deprecation]
+showfileUploaderEncoding = false
+showImageFormat = false
