@@ -39,12 +39,15 @@ class PoliticalAnalyzer:
         try:
             from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
             
+            logger.info("Starting model download/load...")
+            
             # Initialize with pipeline for easier use
             self.classifier = pipeline(
                 "text-classification",
                 model=self.model_name,
                 top_k=None,  # Updated from deprecated return_all_scores=True
-                device=-1  # Use CPU (-1) or GPU (0)
+                device=-1,   # Use CPU (-1) or GPU (0)
+                model_kwargs={"cache_dir": None}  # Use default cache
             )
             
             # Also load tokenizer and model directly for more control
@@ -57,12 +60,19 @@ class PoliticalAnalyzer:
         except ImportError as e:
             logger.error(f"❌ Missing dependencies: {e}")
             self.model_available = False
-            st.error("Missing transformers library. Please install: pip install transformers torch")
+            # Don't show streamlit error here as it might not be available
             
         except Exception as e:
             logger.error(f"❌ Model loading failed: {e}")
             self.model_available = False
-            st.error(f"Failed to load model: {e}")
+            
+            # Check if this is a common cloud deployment issue
+            if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                logger.error("This appears to be a network/timeout issue. The model download may have failed.")
+            elif "memory" in str(e).lower() or "out of memory" in str(e).lower():
+                logger.error("This appears to be a memory issue. The model may be too large for the current environment.")
+            else:
+                logger.error(f"Unexpected error during model loading: {e}")
     
     def analyze_tweet(self, tweet_text: str) -> Dict[str, Any]:
         """

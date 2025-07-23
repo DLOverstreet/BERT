@@ -13,10 +13,14 @@ import uuid
 from typing import List, Dict, Any
 import pandas as pd
 
-# Import our custom modules
-from political_analyzer import PoliticalAnalyzer
-from tweet_tracker import TweetTracker
-from analytics_dashboard import AnalyticsDashboard
+# Import our custom modules with error handling for Streamlit Cloud
+try:
+    from political_analyzer import PoliticalAnalyzer
+    from tweet_tracker import TweetTracker
+    from analytics_dashboard import AnalyticsDashboard
+except ImportError as e:
+    st.error(f"Failed to import modules: {e}")
+    st.stop()
 
 # Page configuration
 st.set_page_config(
@@ -25,6 +29,23 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Debug info for Streamlit Cloud
+if st.sidebar.button("🔍 Debug Info"):
+    st.sidebar.write("**Environment Info:**")
+    import sys
+    st.sidebar.write(f"Python: {sys.version}")
+    st.sidebar.write(f"Streamlit: {st.__version__}")
+    try:
+        import transformers
+        st.sidebar.write(f"Transformers: {transformers.__version__}")
+    except:
+        st.sidebar.write("Transformers: Not available")
+    try:
+        import torch
+        st.sidebar.write(f"PyTorch: {torch.__version__}")
+    except:
+        st.sidebar.write("PyTorch: Not available")
 
 # Custom CSS for political theme
 st.markdown("""
@@ -149,7 +170,14 @@ if 'tweet_tracker' not in st.session_state:
     st.session_state.tweet_tracker = TweetTracker()
 
 if 'political_analyzer' not in st.session_state:
-    st.session_state.political_analyzer = PoliticalAnalyzer()
+    try:
+        with st.spinner("🤖 Loading DistilBERT model (this may take a moment on first run)..."):
+            st.session_state.political_analyzer = PoliticalAnalyzer()
+    except Exception as e:
+        st.error(f"❌ Failed to load political analyzer: {e}")
+        st.info("💡 This might be a temporary issue with model downloading. Try refreshing the page.")
+        # Create a dummy analyzer to prevent crashes
+        st.session_state.political_analyzer = None
 
 if 'analytics_dashboard' not in st.session_state:
     st.session_state.analytics_dashboard = AnalyticsDashboard(st.session_state.tweet_tracker)
@@ -182,8 +210,11 @@ def main():
         st.markdown("---")
         
         # Model status
-        if st.session_state.political_analyzer.model_available:
+        if st.session_state.political_analyzer and st.session_state.political_analyzer.model_available:
             st.success("🤖 DistilBERT Model Ready")
+        elif st.session_state.political_analyzer is None:
+            st.error("❌ Model Failed to Load")
+            st.info("Try refreshing the page")
         else:
             st.error("❌ Model Loading Failed")
         
@@ -275,6 +306,11 @@ def show_analyze_page():
     # Analysis section
     if tweet_text and len(tweet_text.strip()) > 10:
         if st.button("🔍 Analyze Tweet", type="primary"):
+            # Check if model is available
+            if not st.session_state.political_analyzer or not st.session_state.political_analyzer.model_available:
+                st.error("❌ Model not available. Please refresh the page to retry model loading.")
+                return
+                
             with st.spinner("🤖 Analyzing political intensity..."):
                 # Analyze the tweet
                 analysis_result = st.session_state.political_analyzer.analyze_tweet(tweet_text.strip())
