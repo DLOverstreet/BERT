@@ -101,14 +101,25 @@ class PoliticalAnalyzer:
             dem_score = 0
             rep_score = 0
             
-            # Results is a list of dictionaries
+            # Results format: [[{'label': 'Republican', 'score': 0.999}, {'label': 'Democrat', 'score': 0.001}]]
+            # We need to get the inner list first
             if isinstance(results, list) and len(results) > 0:
-                result_list = results  # top_k=None returns list directly
+                if isinstance(results[0], list):
+                    # Nested list format: [[{...}]]
+                    result_list = results[0]
+                else:
+                    # Direct list format: [{...}]
+                    result_list = results
             else:
                 logger.error(f"Unexpected results format: {results}")
                 return {"error": f"Unexpected model output format: {type(results)}"}
             
+            # Now iterate over the actual result dictionaries
             for result in result_list:
+                if not isinstance(result, dict):
+                    logger.error(f"Expected dict, got {type(result)}: {result}")
+                    continue
+                    
                 label = result['label'].upper()
                 score = result['score']
                 
