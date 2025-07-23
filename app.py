@@ -247,6 +247,13 @@ def main():
 def show_analyze_page():
     st.title("🔍 Tweet Analysis")
     
+    # Handle example selection
+    if 'selected_example' in st.session_state:
+        example_text = st.session_state.selected_example
+        del st.session_state.selected_example
+    else:
+        example_text = ""
+    
     # Input methods
     col1, col2 = st.columns([2, 1])
     
@@ -256,9 +263,9 @@ def show_analyze_page():
         # Text input with better handling
         tweet_text = st.text_area(
             "Paste a tweet or political statement:",
+            value=example_text,  # Use the example text if selected
             height=120,
             placeholder="e.g., 'Healthcare should be a human right for all Americans'",
-            key="tweet_input",
             help="Enter any political text to analyze. Minimum 10 characters."
         )
         
@@ -272,29 +279,26 @@ def show_analyze_page():
             else:
                 st.success(f"✅ Ready to analyze ({char_count} characters)")
         
-        # Analysis button - always visible when text is valid
-        analysis_ready = tweet_text and len(tweet_text.strip()) >= 10
-        
         # Quick examples
         st.markdown("**📝 Quick Examples:**")
         example_col1, example_col2 = st.columns(2)
         
         with example_col1:
             if st.button("🔵 Democratic Example", key="dem_ex"):
-                st.session_state.tweet_input = "Healthcare is a human right and we must ensure universal coverage for all Americans."
+                st.session_state.selected_example = "Healthcare is a human right and we must ensure universal coverage for all Americans."
                 st.rerun()
                 
             if st.button("🔴 Republican Example", key="rep_ex"):
-                st.session_state.tweet_input = "We need to cut taxes and reduce government spending to unleash economic growth."
+                st.session_state.selected_example = "We need to cut taxes and reduce government spending to unleash economic growth."
                 st.rerun()
         
         with example_col2:
             if st.button("⚖️ Neutral Example", key="neutral_ex"):
-                st.session_state.tweet_input = "Education is important for preparing our children for the future."
+                st.session_state.selected_example = "Education is important for preparing our children for the future."
                 st.rerun()
                 
             if st.button("🔥 Extreme Example", key="extreme_ex"):
-                st.session_state.tweet_input = "The radical left wants to destroy America with their socialist agenda!"
+                st.session_state.selected_example = "The radical left wants to destroy America with their socialist agenda!"
                 st.rerun()
     
     with col2:
@@ -323,6 +327,8 @@ def show_analyze_page():
             st.info("💡 Go to the '🔬 Model Testing' page in the sidebar for comprehensive debugging tools.")
 
     # Analysis section - improved logic
+    analysis_ready = tweet_text and len(tweet_text.strip()) >= 10
+    
     if analysis_ready:
         # Big analyze button
         analyze_button = st.button(
@@ -389,8 +395,6 @@ def show_analyze_page():
             use_container_width=True,
             help="Enter at least 10 characters of political text to enable analysis"
         )
-    
-    # Model debugging section removed - now available on dedicated testing page
     
     # Recent analyses
     show_recent_analyses()
