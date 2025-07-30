@@ -6,6 +6,7 @@ requests
 pandas
 numpy
 plotly
+matplotlib
 
 # Machine Learning and NLP
 transformers
